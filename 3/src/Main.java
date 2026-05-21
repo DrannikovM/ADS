@@ -1,5 +1,7 @@
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RecursiveTask;
 
 class Student {
     String lastName;
@@ -62,6 +64,80 @@ class BinaryTree {
             inOrderRecursive(root.left);
             System.out.println(root.data);
             inOrderRecursive(root.right);
+        }
+    }
+    public void printParallelInOrder() {
+        System.out.println("--------------------------------------------------------------------------------------");
+        System.out.println("| Прізвище     | Ім'я       | Курс | Квиток   | Стать    | Місце прож.     |");
+        System.out.println("--------------------------------------------------------------------------------------");
+
+        if (root != null) {
+            ForkJoinPool pool = new ForkJoinPool();
+            List<Student> sortedStudents = pool.invoke(new ParallelInOrderTask(root));
+            sortedStudents.forEach(System.out::println);
+        }
+
+        System.out.println("--------------------------------------------------------------------------------------");
+    }
+    private static class ParallelInOrderTask extends RecursiveTask<List<Student>> {
+        private final Node node;
+
+        public ParallelInOrderTask(Node node) {
+            this.node = node;
+        }
+
+        @Override
+        protected List<Student> compute() {
+            List<Student> result = new ArrayList<>();
+            if (node == null) return result;
+
+            ParallelInOrderTask leftTask = new ParallelInOrderTask(node.left);
+            leftTask.fork();
+
+            ParallelInOrderTask rightTask = new ParallelInOrderTask(node.right);
+            List<Student> rightResult = rightTask.compute();
+
+            List<Student> leftResult = leftTask.join();
+
+            result.addAll(leftResult);
+            result.add(node.data);
+            result.addAll(rightResult);
+
+            return result;
+        }
+    }
+    public List<Student> searchByCriteriaParallel() {
+        if (root == null) return new ArrayList<>();
+        ForkJoinPool pool = new ForkJoinPool();
+        return pool.invoke(new ParallelSearchTask(root));
+    }
+    private static class ParallelSearchTask extends RecursiveTask<List<Student>> {
+        private final Node node;
+
+        public ParallelSearchTask(Node node) {
+            this.node = node;
+        }
+
+        @Override
+        protected List<Student> compute() {
+            List<Student> result = new ArrayList<>();
+            if (node == null) return result;
+
+            ParallelSearchTask leftTask = new ParallelSearchTask(node.left);
+            ParallelSearchTask rightTask = new ParallelSearchTask(node.right);
+
+            leftTask.fork();
+            List<Student> rightResult = rightTask.compute();
+            List<Student> leftResult = leftTask.join();
+
+            Student s = node.data;
+            if (s.gender.equalsIgnoreCase("Жіноча") && s.course == 1 && s.residence.equalsIgnoreCase("Гуртожиток")) {
+                result.add(s);
+            }
+
+            result.addAll(leftResult);
+            result.addAll(rightResult);
+            return result;
         }
     }
     public List<Student> searchByCriteria() {
@@ -132,10 +208,10 @@ public class Main {
         tree.insert(new Student("Бондар", "Олена", 1, 108, "Жіноча", "Квартира"));
 
         System.out.println("Вихідне дерево (Паралельний обхід):");
-        tree.printInOrder();
+        tree.printParallelInOrder();
 
         System.out.println("\nРезультат пошуку (Студентки 1-го курсу в гуртожитку):");
-        List<Student> found = tree.searchByCriteria();
+        List<Student> found = tree.searchByCriteriaParallel();
         if (found.isEmpty()) {
             System.out.println("Нікого не знайдено.");
         } else {
